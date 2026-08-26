@@ -8,6 +8,7 @@ const Doctor = require('../models/Doctor');
 const User = require('../models/User');
 const Leave = require('../models/Leave');
 const FamilyMember = require('../models/FamilyMember');
+const Clinic = require('../models/Clinic');
 const { APPOINTMENT_STATUS, NOTIFICATION_TYPE } = require('../utils/constants');
 const { notify } = require('../services/notificationService');
 const { computeEffectiveFee } = require('../services/pricingService');
@@ -127,6 +128,19 @@ const updateAppointmentStatus = asyncHandler(async (req, res) => {
 
   if (status && !Object.values(APPOINTMENT_STATUS).includes(status)) {
     throw new ApiError(400, 'Invalid status value');
+  }
+
+  // Ownership check: a doctor may only update their own appointments, an
+  // admin only appointments at a clinic they own — otherwise this endpoint
+  // would let any doctor/admin mutate any appointment in the system by ID.
+  if (req.user.role === 'doctor') {
+    const doctor = await Doctor.findOne({ userId: req.user.id });
+    if (!doctor || doctor._id.toString() !== appointment.doctorId.toString()) {
+      throw new ApiError(403, 'This appointment does not belong to you');
+    }
+  } else if (req.user.role === 'admin') {
+    const clinic = await Clinic.findOne({ _id: appointment.clinicId, ownerId: req.user.id });
+    if (!clinic) throw new ApiError(403, 'You do not manage this appointment\'s clinic');
   }
 
   const before = { status: appointment.status };

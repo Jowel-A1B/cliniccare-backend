@@ -36,8 +36,13 @@ const getClinicClaims = asyncHandler(async (req, res) => {
 });
 
 const updateClaimStatus = asyncHandler(async (req, res) => {
-  const claim = await InsuranceClaim.findById(req.params.id);
+  const claim = await InsuranceClaim.findById(req.params.id).populate('invoiceId', 'clinicId');
   if (!claim) throw new ApiError(404, 'Claim not found');
+
+  // Security: only the admin who owns the clinic behind this claim's invoice
+  // may approve/reject it — otherwise any admin could act on any claim.
+  const clinic = await Clinic.findOne({ _id: claim.invoiceId.clinicId, ownerId: req.user.id });
+  if (!clinic) throw new ApiError(403, 'You do not manage this claim\'s clinic');
 
   claim.status = req.body.status;
   claim.notes = req.body.notes;

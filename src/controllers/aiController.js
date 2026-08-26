@@ -117,9 +117,24 @@ const parseBookingIntent = asyncHandler(async (req, res) => {
   res.json(new ApiResponse(200, { ...parsed, specializationId: matchedSpec?._id || null, transcript }));
 });
 
+// Doctor callers must share a real appointment with the patient (or hold
+// explicit sharing access) — same relationship rule recordController uses,
+// otherwise any doctor could pull any patient's risk data by ID.
+async function assertDoctorCanViewPatient(userId, patient) {
+  const doctor = await Doctor.findOne({ userId });
+  if (!doctor) throw new ApiError(404, 'Doctor profile not found');
+
+  const hasAppointment = await Appointment.exists({ doctorId: doctor._id, patientId: patient._id });
+  const isShared = patient.sharedWithDoctorIds.some((id) => id.toString() === doctor._id.toString());
+  if (!hasAppointment && !isShared) {
+    throw new ApiError(403, "You don't have access to this patient's data");
+  }
+}
+
 const getPatientRiskScore = asyncHandler(async (req, res) => {
   const patient = await Patient.findById(req.params.patientId);
   if (!patient) throw new ApiError(404, 'Patient not found');
+  if (req.user.role === 'doctor') await assertDoctorCanViewPatient(req.user.id, patient);
 
   const records = await MedicalRecord.find({ patientId: patient._id });
   const result = computePatientRiskScore(records, patient);
@@ -129,6 +144,7 @@ const getPatientRiskScore = asyncHandler(async (req, res) => {
 const getNoShowRisk = asyncHandler(async (req, res) => {
   const patient = await Patient.findById(req.params.patientId);
   if (!patient) throw new ApiError(404, 'Patient not found');
+  if (req.user.role === 'doctor') await assertDoctorCanViewPatient(req.user.id, patient);
 
   const appointments = await Appointment.find({ patientId: patient._id }).sort({ date: -1 });
   const result = computeNoShowRisk(appointments);
