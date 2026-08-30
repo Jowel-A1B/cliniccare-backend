@@ -5,6 +5,7 @@ const MedicalRecord = require('../models/MedicalRecord');
 const Doctor = require('../models/Doctor');
 const Patient = require('../models/Patient');
 const Appointment = require('../models/Appointment');
+const Invoice = require('../models/Invoice');
 const { APPOINTMENT_STATUS } = require('../utils/constants');
 
 // Doctor writes a diagnosis/notes entry for a completed (or in-progress) appointment.
@@ -33,6 +34,23 @@ const createRecord = asyncHandler(async (req, res) => {
   // can be split into a separate step later if needed.
   appointment.status = APPOINTMENT_STATUS.COMPLETED;
   await appointment.save();
+
+  // Auto-generate the consultation invoice so the patient has a bill to pay
+  // right after the diagnosis — without waiting for an admin to raise one.
+  // Admin billing can still add extra line items as a separate invoice.
+  const fee = appointment.feeCharged || 0;
+  if (fee > 0) {
+    const alreadyBilled = await Invoice.exists({ appointmentId });
+    if (!alreadyBilled) {
+      await Invoice.create({
+        appointmentId,
+        patientId: appointment.patientId,
+        clinicId: appointment.clinicId,
+        items: [{ label: 'Consultation Fee', amount: fee }],
+        total: fee,
+      });
+    }
+  }
 
   res.status(201).json(new ApiResponse(201, record, 'Medical record saved'));
 });
