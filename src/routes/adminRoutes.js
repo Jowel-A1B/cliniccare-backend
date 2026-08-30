@@ -6,6 +6,7 @@ const {
   getDashboardSummary,
   getPendingDoctors,
   reviewDoctor,
+  listPatients,
 } = require('../controllers/adminController');
 const { protect } = require('../middleware/auth');
 const { allowRoles } = require('../middleware/roleCheck');
@@ -17,5 +18,6 @@ router.get('/clinics', getMyClinics);
 router.get('/dashboard-summary', getDashboardSummary);
 router.get('/doctors/pending', getPendingDoctors);
 router.patch('/doctors/:id/review', reviewDoctor);
+router.get('/patients', listPatients);
 
 module.exports = router;

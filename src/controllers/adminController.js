@@ -4,6 +4,7 @@ const ApiError = require('../utils/ApiError');
 const Clinic = require('../models/Clinic');
 const Doctor = require('../models/Doctor');
 const User = require('../models/User');
+const Patient = require('../models/Patient');
 const Appointment = require('../models/Appointment');
 const { APPOINTMENT_STATUS, NOTIFICATION_TYPE } = require('../utils/constants');
 const { notify } = require('../services/notificationService');
@@ -106,4 +107,25 @@ const reviewDoctor = asyncHandler(async (req, res) => {
   res.json(new ApiResponse(200, doctor, `Doctor ${decision}`));
 });
 
-module.exports = { createClinic, getMyClinics, getDashboardSummary, getPendingDoctors, reviewDoctor };
+// Flat patient directory for admin-side pickers (bed assignment, OT, etc.)
+// where the admin needs to choose a patient by name rather than paste an id.
+const listPatients = asyncHandler(async (req, res) => {
+  const patients = await Patient.find().populate('userId', 'name phone email').sort({ createdAt: -1 });
+  res.json(
+    new ApiResponse(
+      200,
+      patients
+        .filter((p) => p.userId)
+        .map((p) => ({ _id: p._id, name: p.userId.name, phone: p.userId.phone || '', email: p.userId.email }))
+    )
+  );
+});
+
+module.exports = {
+  createClinic,
+  getMyClinics,
+  getDashboardSummary,
+  getPendingDoctors,
+  reviewDoctor,
+  listPatients,
+};
