@@ -49,6 +49,7 @@ const checkAvailability = asyncHandler(async (req, res) => {
       specializationId: doctor.specializationId,
       clinicIds: { $in: doctor.clinicIds },
       isAvailable: true,
+      approvalStatus: { $nin: ['pending', 'rejected'] },
     })
       .populate('userId', 'name')
       .populate('specializationId', 'name');

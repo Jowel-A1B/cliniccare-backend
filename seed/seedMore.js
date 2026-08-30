@@ -82,6 +82,7 @@ async function run() {
       peakHourFee: d.peak,
       bio: `${d.spec} at ${d.clinic.name}, ${d.exp} years of experience.`,
       availability: [{ day: 'sat', startTime: '09:00', endTime: '13:00' }],
+      approvalStatus: 'approved', // seeded doctors are pre-approved
     });
     console.log(`[seedMore] created doctor: ${d.email} (${d.spec}, ${d.clinic.name})`);
   }

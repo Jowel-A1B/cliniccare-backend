@@ -7,7 +7,9 @@ const Doctor = require('../models/Doctor');
 const searchDoctors = asyncHandler(async (req, res) => {
   const { specialization, city, maxFee, minRating, clinicId } = req.query;
 
-  const query = { isAvailable: true };
+  // Hide doctors still awaiting approval (or rejected). Doctors created before
+  // this field existed have no approvalStatus and stay visible.
+  const query = { isAvailable: true, approvalStatus: { $nin: ['pending', 'rejected'] } };
   if (specialization) query.specializationId = specialization;
   if (clinicId) query.clinicIds = clinicId;
   if (maxFee) query.consultationFee = { $lte: Number(maxFee) };
@@ -31,6 +33,8 @@ const getDoctorById = asyncHandler(async (req, res) => {
     .populate('specializationId', 'name')
     .populate('clinicIds', 'name city address location');
   if (!doctor) throw new ApiError(404, 'Doctor not found');
+  // Don't expose a pending/rejected doctor's public profile.
+  if (['pending', 'rejected'].includes(doctor.approvalStatus)) throw new ApiError(404, 'Doctor not found');
   res.json(new ApiResponse(200, doctor));
 });
 

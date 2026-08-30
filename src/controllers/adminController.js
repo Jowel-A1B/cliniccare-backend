@@ -3,8 +3,11 @@ const ApiResponse = require('../utils/ApiResponse');
 const ApiError = require('../utils/ApiError');
 const Clinic = require('../models/Clinic');
 const Doctor = require('../models/Doctor');
+const User = require('../models/User');
 const Appointment = require('../models/Appointment');
-const { APPOINTMENT_STATUS } = require('../utils/constants');
+const { APPOINTMENT_STATUS, NOTIFICATION_TYPE } = require('../utils/constants');
+const { notify } = require('../services/notificationService');
+const { logAudit } = require('../services/auditService');
 
 const createClinic = asyncHandler(async (req, res) => {
   const clinic = await Clinic.create({ ...req.body, ownerId: req.user.id });
@@ -43,4 +46,64 @@ const getDashboardSummary = asyncHandler(async (req, res) => {
   );
 });
 
-module.exports = { createClinic, getMyClinics, getDashboardSummary };
+// --- Doctor account approval ---------------------------------------------
+// Self-registered doctors land here as `pending`. Any admin can review them;
+// approval activates the underlying User account so the doctor can log in.
+
+const getPendingDoctors = asyncHandler(async (req, res) => {
+  const doctors = await Doctor.find({ approvalStatus: 'pending' })
+    .populate('userId', 'name email phone createdAt')
+    .populate('specializationId', 'name')
+    .sort({ createdAt: 1 });
+  res.json(new ApiResponse(200, doctors));
+});
+
+const reviewDoctor = asyncHandler(async (req, res) => {
+  const { decision, reason } = req.body;
+  if (!['approved', 'rejected'].includes(decision)) {
+    throw new ApiError(400, "decision must be 'approved' or 'rejected'");
+  }
+
+  const doctor = await Doctor.findById(req.params.id).populate('userId', 'name email');
+  if (!doctor) throw new ApiError(404, 'Doctor not found');
+  if (doctor.approvalStatus !== 'pending') {
+    throw new ApiError(409, `This doctor has already been ${doctor.approvalStatus}`);
+  }
+
+  const before = { approvalStatus: doctor.approvalStatus };
+
+  doctor.approvalStatus = decision;
+  doctor.approvedBy = req.user.id;
+  doctor.approvedAt = new Date();
+  doctor.rejectionReason = decision === 'rejected' ? reason || null : null;
+  await doctor.save();
+
+  // Approval flips the User active; rejection leaves it inactive so the
+  // account can't be used, but the record is kept for the audit trail.
+  await User.findByIdAndUpdate(doctor.userId._id, { isActive: decision === 'approved' });
+
+  await logAudit({
+    userId: req.user.id,
+    userRole: req.user.role,
+    action: `doctor.${decision}`,
+    entityType: 'Doctor',
+    entityId: doctor._id,
+    before,
+    after: { approvalStatus: doctor.approvalStatus },
+  });
+
+  await notify({
+    userId: doctor.userId._id,
+    userEmail: doctor.userId.email,
+    type: NOTIFICATION_TYPE.GENERAL,
+    subject: `Doctor account ${decision}`,
+    message:
+      decision === 'approved'
+        ? 'Your doctor account has been approved. You can now log in.'
+        : `Your doctor account registration was not approved${reason ? `: ${reason}` : '.'}`,
+  });
+
+  res.json(new ApiResponse(200, doctor, `Doctor ${decision}`));
+});
+
+module.exports = { createClinic, getMyClinics, getDashboardSummary, getPendingDoctors, reviewDoctor };

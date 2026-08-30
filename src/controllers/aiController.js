@@ -52,7 +52,11 @@ const matchDoctors = asyncHandler(async (req, res) => {
 
   const matchedSpec = specs.find((s) => raw.toLowerCase().includes(s.name.toLowerCase())) || specs[0];
 
-  const doctors = await Doctor.find({ specializationId: matchedSpec._id, isAvailable: true })
+  const doctors = await Doctor.find({
+    specializationId: matchedSpec._id,
+    isAvailable: true,
+    approvalStatus: { $nin: ['pending', 'rejected'] },
+  })
     .populate('userId', 'name')
     .populate('specializationId', 'name')
     .populate('clinicIds', 'name city')

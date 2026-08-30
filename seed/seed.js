@@ -56,6 +56,7 @@ async function run() {
     consultationFee: 800,
     bio: 'Senior cardiologist with 10 years of experience.',
     availability: [{ day: 'sat', startTime: '17:00', endTime: '20:00' }],
+    approvalStatus: 'approved', // seeded doctors are pre-approved
   });
 
   const doctorUser2 = await User.create({
@@ -72,6 +73,7 @@ async function run() {
     consultationFee: 1000,
     bio: 'Orthopedic surgeon specializing in joint pain.',
     availability: [{ day: 'sun', startTime: '10:00', endTime: '13:00' }],
+    approvalStatus: 'approved', // seeded doctors are pre-approved
   });
 
   const patientUser = await User.create({

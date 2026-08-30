@@ -24,6 +24,19 @@ const doctorSchema = new mongoose.Schema(
     ratingCount: { type: Number, default: 0 },
     availability: [availabilitySchema],
     isAvailable: { type: Boolean, default: true }, // toggled off for V2 leave-management
+    // A self-registered doctor starts as `pending` and cannot log in or be
+    // booked until a clinic admin approves them. Seeded doctors are created
+    // as `approved` directly. Admin accounts can no longer self-register at
+    // all — they're provisioned via the seed script / DB only.
+    approvalStatus: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending',
+      index: true,
+    },
+    approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    approvedAt: { type: Date, default: null },
+    rejectionReason: { type: String, default: null },
   },
   { timestamps: true }
 );

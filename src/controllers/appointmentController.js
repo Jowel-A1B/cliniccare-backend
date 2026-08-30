@@ -40,6 +40,9 @@ const createAppointment = asyncHandler(async (req, res) => {
 
   const doctor = await Doctor.findById(doctorId).populate('userId', 'name email');
   if (!doctor) throw new ApiError(404, 'Doctor not found');
+  if (['pending', 'rejected'].includes(doctor.approvalStatus)) {
+    throw new ApiError(400, 'This doctor is not available for booking');
+  }
 
   // V2: block booking on a day the doctor is on leave.
   const onLeave = await Leave.exists({ doctorId, startDate: { $lte: date }, endDate: { $gte: date } });
