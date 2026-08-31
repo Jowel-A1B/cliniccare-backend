@@ -21,14 +21,23 @@ const createRecord = asyncHandler(async (req, res) => {
     throw new ApiError(403, 'This appointment does not belong to you');
   }
 
-  const record = await MedicalRecord.create({
-    patientId: appointment.patientId,
-    doctorId: doctor._id,
-    appointmentId,
-    familyMemberId: appointment.familyMemberId || null,
-    diagnosis,
-    notes,
-  });
+  // Upsert: a doctor may open an already-completed visit to add or correct
+  // notes, so don't create a second record for the same appointment.
+  let record = await MedicalRecord.findOne({ appointmentId });
+  if (record) {
+    record.diagnosis = diagnosis;
+    record.notes = notes;
+    await record.save();
+  } else {
+    record = await MedicalRecord.create({
+      patientId: appointment.patientId,
+      doctorId: doctor._id,
+      appointmentId,
+      familyMemberId: appointment.familyMemberId || null,
+      diagnosis,
+      notes,
+    });
+  }
 
   // Marking the visit completed here keeps the doctor's flow to one action;
   // can be split into a separate step later if needed.

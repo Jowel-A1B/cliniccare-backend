@@ -19,18 +19,26 @@ const createPrescription = asyncHandler(async (req, res) => {
   });
   if (!appointment) throw new ApiError(404, 'Appointment not found');
 
-  const existing = await Prescription.findOne({ appointmentId });
-  if (existing) throw new ApiError(409, 'A prescription already exists for this appointment');
-
-  const prescription = await Prescription.create({
-    appointmentId,
-    patientId: appointment.patientId._id,
-    doctorId: doctor._id,
-    familyMemberId: appointment.familyMemberId || null,
-    medicines,
-    testsSuggested,
-    followUpDate,
-  });
+  // Upsert: re-saving a visit (e.g. the doctor correcting notes on an
+  // already-completed appointment) updates the existing prescription rather
+  // than failing.
+  let prescription = await Prescription.findOne({ appointmentId });
+  if (prescription) {
+    prescription.medicines = medicines;
+    prescription.testsSuggested = testsSuggested;
+    prescription.followUpDate = followUpDate;
+  } else {
+    prescription = new Prescription({
+      appointmentId,
+      patientId: appointment.patientId._id,
+      doctorId: doctor._id,
+      familyMemberId: appointment.familyMemberId || null,
+      medicines,
+      testsSuggested,
+      followUpDate,
+    });
+  }
+  await prescription.save();
 
   const pdfPath = await generatePrescriptionPdf({
     prescriptionId: prescription._id,
