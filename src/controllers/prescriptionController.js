@@ -5,7 +5,7 @@ const Prescription = require('../models/Prescription');
 const Appointment = require('../models/Appointment');
 const Doctor = require('../models/Doctor');
 const Patient = require('../models/Patient');
-const { generatePrescriptionPdf } = require('../services/pdfService');
+const { streamPrescriptionPdf } = require('../services/pdfService');
 
 const createPrescription = asyncHandler(async (req, res) => {
   const { appointmentId, medicines, testsSuggested, followUpDate } = req.body;
@@ -40,18 +40,8 @@ const createPrescription = asyncHandler(async (req, res) => {
   }
   await prescription.save();
 
-  const pdfPath = await generatePrescriptionPdf({
-    prescriptionId: prescription._id,
-    patientName: appointment.patientId.userId.name,
-    doctorName: doctor.userId.name,
-    medicines,
-    testsSuggested,
-    followUpDate,
-  });
-
-  prescription.pdfPath = pdfPath;
-  await prescription.save();
-
+  // The PDF is generated on demand from this data (see getPrescriptionPdf) —
+  // nothing is stored on disk, so it can't go missing on a server restart.
   res.status(201).json(new ApiResponse(201, prescription, 'Prescription created'));
 });
 
@@ -89,4 +79,27 @@ const getPrescriptionByAppointment = asyncHandler(async (req, res) => {
   res.json(new ApiResponse(200, prescription));
 });
 
-module.exports = { createPrescription, getPrescription, getPrescriptionByAppointment };
+// Builds the prescription PDF fresh from the DB and streams it as a download.
+// Auth-checked (same rule as viewing the prescription), so the frontend must
+// fetch it with the bearer token and save the blob — a plain <a href> can't
+// send the header.
+const getPrescriptionPdf = asyncHandler(async (req, res) => {
+  const prescription = await Prescription.findById(req.params.id)
+    .populate({ path: 'patientId', populate: { path: 'userId', select: 'name' } })
+    .populate({ path: 'doctorId', populate: { path: 'userId', select: 'name' } });
+  if (!prescription) throw new ApiError(404, 'Prescription not found');
+
+  await assertCanViewPrescription(prescription, req.user);
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="prescription_${prescription._id}.pdf"`);
+  streamPrescriptionPdf(res, {
+    patientName: prescription.patientId?.userId?.name || 'Patient',
+    doctorName: prescription.doctorId?.userId?.name || 'Doctor',
+    medicines: prescription.medicines,
+    testsSuggested: prescription.testsSuggested,
+    followUpDate: prescription.followUpDate,
+  });
+});
+
+module.exports = { createPrescription, getPrescription, getPrescriptionByAppointment, getPrescriptionPdf };
